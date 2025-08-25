@@ -4,6 +4,7 @@
   "private": true,
   "main": "index.js",
   "scripts": { "start": "node index.js" },
+  "engines": { "node": "20.x" },
   "dependencies": {
     "express": "^4.19.2",
     "raw-body": "^2.5.2"

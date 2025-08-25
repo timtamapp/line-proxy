@@ -1,4 +1,4 @@
-// CommonJS version (no "type":"module")
+// CommonJS (no "type":"module")
 const express = require('express');
 const getRawBody = require('raw-body');
 const crypto = require('crypto');
@@ -14,28 +14,24 @@ app.get('/line/webhook', (req, res) => res.type('text/plain').send('Use POST /li
 // LINE → proxy → Apps Script
 app.post('/line/webhook', async (req, res) => {
   try {
-    // 1) raw body (needed for signature verify)
+    // 1) read raw body (required for signature verification)
     const raw = (await getRawBody(req)).toString('utf8');
 
-    // 2) verify X-Line-Signature
+    // 2) verify LINE signature
     const sig = req.header('x-line-signature') || '';
     const channelSecret = process.env.LINE_CHANNEL_SECRET || '';
-    if (!channelSecret) {
-      console.error('Missing LINE_CHANNEL_SECRET');
-      return res.status(500).send('Missing secret');
-    }
+    if (!channelSecret) return res.status(500).send('Missing LINE_CHANNEL_SECRET');
+
     const calc = crypto.createHmac('sha256', channelSecret).update(raw).digest('base64');
     const safeEq = (a, b) =>
       a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
     if (!sig || !safeEq(calc, sig)) return res.status(403).send('bad signature');
 
-    // 3) forward to Apps Script with our HMAC
+    // 3) forward to Apps Script with our own HMAC
     const appsScriptUrl = process.env.APPS_SCRIPT_URL;
     const forwardSecret = process.env.FORWARD_SHARED_SECRET || '';
-    if (!appsScriptUrl || !forwardSecret) {
-      console.error('Missing APPS_SCRIPT_URL or FORWARD_SHARED_SECRET');
-      return res.status(500).send('Missing config');
-    }
+    if (!appsScriptUrl || !forwardSecret) return res.status(500).send('Missing config');
+
     const ts = Math.floor(Date.now() / 1000).toString();
     const fSig = crypto.createHmac('sha256', forwardSecret).update(raw + '|' + ts).digest('base64');
 
