@@ -45,7 +45,6 @@ app.post('/line/webhook', async (req, res) => {
     );
     const text = await resp.text();
 
-    // mirror status for easier debugging
     return res.status(resp.status || 200).send(text);
   } catch (err) {
     console.error(err);
