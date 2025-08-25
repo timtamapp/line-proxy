@@ -1,40 +1,37 @@
-import express from 'express';
-import getRawBody from 'raw-body';
-import crypto from 'crypto';
+// cloud-run-proxy/index.js  (CommonJS)
+const express = require('express');
+const getRawBody = require('raw-body');
+const crypto = require('crypto');
 
 const app = express();
+app.disable('x-powered-by');
 
+// Simple pages (handy for browser + health checks)
+app.get('/', (req, res) => res.status(200).send('LINE proxy is alive'));
+app.get('/healthz', (req, res) => res.status(200).send('ok'));
+
+// LINE webhook → verify X-Line-Signature → forward to Apps Script with our HMAC
 app.post('/line/webhook', async (req, res) => {
   try {
+    // 1) Read raw body (needed for signature verification)
     const raw = (await getRawBody(req)).toString('utf8');
-    const sig = req.header('x-line-signature') || '';
-    const secret = process.env.LINE_CHANNEL_SECRET || '';
-    if (!secret) return res.status(500).send('Missing secret');
 
-    const h = crypto.createHmac('sha256', secret).update(raw).digest('base64');
+    // 2) Verify LINE signature
+    const sig = req.header('x-line-signature') || '';
+    const channelSecret = process.env.LINE_CHANNEL_SECRET || '';
+    if (!channelSecret) {
+      console.error('Missing LINE_CHANNEL_SECRET');
+      return res.status(500).send('Missing secret');
+    }
+    const calc = crypto.createHmac('sha256', channelSecret).update(raw).digest('base64');
     const safeEq = (a, b) =>
       a.length === b.length && crypto.timingSafeEqual(Buffer.from(a), Buffer.from(b));
-    if (!sig || !safeEq(h, sig)) return res.status(403).send('bad signature');
+    if (!sig || !safeEq(calc, sig)) return res.status(403).send('bad signature');
 
-    const ts = Math.floor(Date.now() / 1000).toString();
-    const fSecret = process.env.FORWARD_SHARED_SECRET || '';
-    const fSig = crypto.createHmac('sha256', fSecret).update(raw + '|' + ts).digest('base64');
-
-    const url = process.env.APPS_SCRIPT_URL;
-    const resp = await fetch(`${url}?ts=${encodeURIComponent(ts)}&sig=${encodeURIComponent(fSig)}`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: raw
-    });
-    const text = await resp.text();
-    res.status(200).send(text);
-  } catch (e) {
-    console.error(e);
-    res.status(500).send('err');
-  }
-});
-
-app.get('/healthz', (req, res) => res.send('ok'));
-
-const port = process.env.PORT || 8080;
-app.listen(port, () => console.log('listening on', port));
+    // 3) Forward to Apps Script with our own HMAC
+    const forwardSecret = process.env.FORWARD_SHARED_SECRET || '';
+    if (!forwardSecret) {
+      console.error('Missing FORWARD_SHARED_SECRET');
+      return res.status(500).send('Missing forward secret');
+    }
+    const ts =
