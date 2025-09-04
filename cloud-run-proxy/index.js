@@ -80,7 +80,9 @@ app.post('/line/webhook', async (req, res) => {
     const t = setTimeout(() => controller.abort(), 3000); // 3s cap
 
     try {
-      const url = `${appsScriptUrl}?ts=${encodeURIComponent(ts)}&sig=${encodeURIComponent(fSig)}`;
+      //const url = `${appsScriptUrl}?ts=${encodeURIComponent(ts)}&sig=${encodeURIComponent(fSig)}`;
+      const url = `${appsScriptUrl}?ts=${encodeURIComponent(ts)}&sig=${encodeURIComponent(fSig)}&dbg=1`;
+
       const resp = await fetch(url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
